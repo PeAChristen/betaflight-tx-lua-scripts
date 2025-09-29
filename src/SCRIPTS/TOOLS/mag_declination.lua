@@ -64,6 +64,8 @@ local function load_wmm_cof(path)
   io.close(f)
 
   local line
+
+  --TODO: skipp if line starts with "9999"
   
   for i=1, #all_data do
     --print(all_data[i])
