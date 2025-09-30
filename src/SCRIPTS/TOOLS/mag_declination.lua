@@ -7,6 +7,7 @@
 -- Anpassa GPS_TELEM_NAME om din telemetri använder ett annat namn.
 
 local WMM_PATH = "/SCRIPTS/TOOLS/WMM.COF"
+local WMM_SIZE_STANDARD = 12 
 local GPS_TELEM_NAME = "GPS"
 local CRSF_DP_FRAME = 0x2D
 
@@ -35,7 +36,7 @@ local function toRad(d) return d * math.pi / 180.0 end
 local function toDeg(r) return r * 180.0 / math.pi end
 
 -- == WMM inläsning ==
-local WMM = { g = {}, h = {}, g_dot = {}, h_dot = {}, epoch = nil, maxdeg = 12 }
+local WMM = { g = {}, h = {}, g_dot = {}, h_dot = {}, epoch = nil, maxdeg = WMM_SIZE_STANDARD }
 
 
 local function load_wmm_cof(path)
@@ -47,7 +48,7 @@ local function load_wmm_cof(path)
   local num_lines = 1
   
   while true do
-      local data = io.read(f, chunks)     -- read up to 10 characters (newline char also counts!)
+      local data = io.read(f, chunks)     -- check each character
       if #data == 0 then
         break 
       end    
@@ -62,15 +63,19 @@ local function load_wmm_cof(path)
   end
 
   io.close(f)
-
   local line
-
-  --TODO: skipp if line starts with "9999"
   
   for i=1, #all_data do
-    --print(all_data[i])
+    
     line = trim(all_data[i])
-    --print(line)
+    
+    --TODO: check if this works
+    --TODO: reached eof if line starts with "9999"
+    if string.match(line,"^99999") then
+      print(line)
+      break 
+    end
+    
     if line == "" then goto continue end
     local epoch = string.match(line,"^%s*%d%d%d%d%.%d")
     if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
@@ -89,7 +94,7 @@ local function load_wmm_cof(path)
     end
     ::continue::
   end
-  --f:close()
+  
   if not WMM.epoch then WMM.epoch = os.date("%Y") + 0.0 end
   return true
 end
@@ -477,3 +482,4 @@ local function run(event)
 end
 
 return { init = init, background = background, run = run }
+
