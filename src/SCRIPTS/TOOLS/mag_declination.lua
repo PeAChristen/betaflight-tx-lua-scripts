@@ -445,14 +445,16 @@ local function run(event)
       local decl, incl = wmm_declination(state.gps.lat, state.gps.lon, state.gps.alt, state.year_dec)
       state.decl, state.incl = decl, incl
 
-      lcd.drawText(2,30, string.format("Lt %.6f  Ln %.6f", state.gps.lat, state.gps.lon))
+      lcd.drawText(2,30, string.format("Lt %.4f  Ln %.4f Al %.2f", state.gps.lat, state.gps.lon, state.gps.alt))
       lcd.drawText(2,40, string.format("Dec: %.3f°  Inc: %.3f°", round(decl,3), round(incl,3)))
 
       if not state.pending_readback and not state.got_confirmation then
-        lcd.drawText(2,92, "Tryck ENT för att skicka till FC")
-        lcd.drawText(2,110, "Tryck EXIT för att avsluta")
+        lcd.drawText(2,50, "Tryck ENT för att skicka till FC")
+        lcd.drawText(2,60, "Tryck EXIT för att avsluta")
         if event == EVT_ENTER_BREAK then
-          local ok, err = send_set_and_request_readback(decl)
+          --local ok, err = send_set_and_request_readback(decl)
+          print("Send " ..dec1)
+          local ok = true
           if not ok then
             state.msg = "Fel vid sändning: " .. tostring(err)
           end
@@ -471,11 +473,11 @@ local function run(event)
         end
       elseif state.got_confirmation then
         if state.expected_value ~= nil then
-          lcd.drawText(2,92, string.format("FC rapporterar %s = %d", state.expected_param, state.expected_value))
+          lcd.drawText(2,30, string.format("FC rapporterar %s = %d", state.expected_param, state.expected_value))
         else
-          lcd.drawText(2,92, "Bekräftelse mottagen.")
+          lcd.drawText(2,40, "Bekräftelse mottagen.")
         end
-        lcd.drawText(2,110, "Tryck EXIT för att avsluta")
+        lcd.drawText(2,50, "Tryck EXIT för att avsluta")
       end
     else
       lcd.drawText(2,45,"Väntar på GPS-telemetri...")
@@ -493,6 +495,7 @@ local function run(event)
 end
 
 return { init = init, background = background, run = run }
+
 
 
 
