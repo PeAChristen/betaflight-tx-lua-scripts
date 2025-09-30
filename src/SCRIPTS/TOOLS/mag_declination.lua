@@ -40,12 +40,12 @@ local WMM = { g = {}, h = {}, g_dot = {}, h_dot = {}, epoch = nil, maxdeg = WMM_
 
 
 local function load_wmm_cof(path)
-  local f = io.open(path, "r")
-
   local all_data = {}
   local line_data = ""
   local chunks = 1
   local num_lines = 1
+
+  local f = io.open(path, "r")
   
   while true do
       local data = io.read(f, chunks)     -- check each character
@@ -55,7 +55,7 @@ local function load_wmm_cof(path)
 
       line_data = line_data ..data
       
-      if data == "\n" then
+      if data == "\n" then              -- if eol add and start new entry in array
         all_data[num_lines] = line_data
         num_lines = num_lines + 1
         line_data = ""
@@ -64,11 +64,16 @@ local function load_wmm_cof(path)
 
   io.close(f)
   local line
+
+  --TODO: check if this is working, only set epoch on first line
+  local epoch = string.match(all_data[1],"^%s*%d%d%d%d%.%d")
+  print(epoch)
+  if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
+  print(WMM.epoch)
   
-  for i=1, #all_data do
-    
+  --Start at first datat line, 2
+  for i=2, #all_data do
     line = trim(all_data[i])
-    
     --TODO: check if this works
     --TODO: reached eof if line starts with "9999"
     if string.match(line,"^99999") then
@@ -77,15 +82,17 @@ local function load_wmm_cof(path)
     end
     
     if line == "" then goto continue end
-    local epoch = string.match(line,"^%s*%d%d%d%d%.%d")
-    if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
+
     local n,m,gnm,hnm,dgnm,dhnm = string.match(line,"^(%d+)%s+(%d+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)")
     if n then
       n = tonumber(n); m = tonumber(m)
+      --if no entry declair as array
       WMM.g[n] = WMM.g[n] or {}
       WMM.h[n] = WMM.h[n] or {}
       WMM.g_dot[n] = WMM.g_dot[n] or {}
       WMM.h_dot[n] = WMM.h_dot[n] or {}
+
+      --add values from file
       WMM.g[n][m] = tonumber(gnm) or 0
       WMM.h[n][m] = tonumber(hnm) or 0
       WMM.g_dot[n][m] = tonumber(dgnm) or 0
@@ -482,4 +489,5 @@ local function run(event)
 end
 
 return { init = init, background = background, run = run }
+
 
