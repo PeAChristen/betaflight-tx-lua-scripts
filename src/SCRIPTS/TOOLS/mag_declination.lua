@@ -475,7 +475,7 @@ local function run(event)
         if state.expected_value ~= nil then
           lcd.drawText(2,30, string.format("FC rapporterar %s = %d", state.expected_param, state.expected_value))
         else
-          lcd.drawText(2,40, "Bekräftelse mottagen.")
+          lcd.drawText(2,30, "Bekräftelse ej mottagen.")
         end
         lcd.drawText(2,50, "Tryck EXIT för att avsluta")
       end
@@ -495,6 +495,7 @@ local function run(event)
 end
 
 return { init = init, background = background, run = run }
+
 
 
 
