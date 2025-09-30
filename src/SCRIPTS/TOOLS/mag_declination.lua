@@ -453,6 +453,7 @@ local function run(event)
         lcd.drawText(2,60, "Tryck EXIT för att avsluta")
         if event == EVT_ENTER_BREAK then
           --local ok, err = send_set_and_request_readback(decl)
+          --TODO: test the send function before trying to send it
           print("Send " ..dec1)
           local ok = true
           if not ok then
@@ -495,6 +496,7 @@ local function run(event)
 end
 
 return { init = init, background = background, run = run }
+
 
 
 
