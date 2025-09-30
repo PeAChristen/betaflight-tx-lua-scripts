@@ -107,7 +107,7 @@ local function load_wmm_cof(path)
   end
   
   if not WMM.epoch then WMM.epoch = os.date("%Y") + 0.0 end
-  return error, true
+  return true, error
 end
 
 -- == WMM-beräkning (förenklad) ==
@@ -493,6 +493,7 @@ local function run(event)
 end
 
 return { init = init, background = background, run = run }
+
 
 
 
