@@ -312,11 +312,12 @@ local function get_gps_from_telemetry()
       return v.lat, v.lon, v.alt or 0
     end
   end
+  -- ska endast använda drönarens gps
   -- fallback: getTxGPS (om radio har inbyggd GPS)
-  if getTxGPS then
-    local txg = getTxGPS()
-    if txg and txg.fix then return txg.lat, txg.lon, txg.alt or 0 end
-  end
+  --if getTxGPS then
+    --local txg = getTxGPS()
+    --if txg and txg.fix then return txg.lat, txg.lon, txg.alt or 0 end
+  --end
   return nil
 end
 
