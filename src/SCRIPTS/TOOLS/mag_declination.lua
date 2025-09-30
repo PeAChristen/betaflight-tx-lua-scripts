@@ -176,7 +176,7 @@ local function wmm_declination(lat_deg, lon_deg, alt_m, date_year)
   local dt = (date_year or (date["year"] + yday/365.25)) - (WMM.epoch or date["year"])
   local g, h = {}, {}
   
-  for n=0,nmax do  --TODO check why start at 0?
+  for n=0,nmax do  --TODO check why n start at 0? n starts at 1 in WMM.COF file
     g[n], h[n] = {}, {}
     for m=0,n do
       local g0 = (WMM.g[n] and WMM.g[n][m]) or 0
