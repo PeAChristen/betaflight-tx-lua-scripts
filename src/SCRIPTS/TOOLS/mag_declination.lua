@@ -72,11 +72,11 @@ local function load_wmm_cof(path)
   if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
   print(WMM.epoch)
   
-  --Start at first datat line, 2
+  --Start at first data line, 2
   for i=2, #all_data do
     line = trim(all_data[i])
     --TODO: check if this works
-    --TODO: reached eof if line starts with "9999"
+    --TODO: reached eof if line starts with "9999" and add no more to all_data
     if string.match(line,"^99999") then
       print(line)
       break 
@@ -113,9 +113,9 @@ end
 -- == WMM-beräkning (förenklad) ==
 local function compute_Pnm(sinphi, cosphi, nmax)
   local P = {}
-  for n=0,nmax do
+  for n=0,nmax do --TODO check if n should start at 1? WMM.COF starts at 1
     P[n] = {}
-    for m=0,n+1 do  --TODO test this or go back to "for m=0, nmax do"
+    for m=0,n+1 do  --TODO test if this works or go back to "for m=0, nmax do"
       P[n][m] = 0 
     end
   end
@@ -125,7 +125,7 @@ local function compute_Pnm(sinphi, cosphi, nmax)
     P[1][0] = sinphi
     P[1][1] = cosphi
   end
-  for n=2,nmax do
+  for n=2,nmax do --TODO: figure if start att n=2 is correct
     P[n][0] = ((2*n-1) * sinphi * P[n-1][0] - (n-1) * P[n-2][0]) / n
   end
   for n=2,nmax do
