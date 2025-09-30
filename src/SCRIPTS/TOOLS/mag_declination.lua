@@ -11,6 +11,13 @@ local WMM_SIZE_STANDARD = 12
 local GPS_TELEM_NAME = "GPS"
 local CRSF_DP_FRAME = 0x2D
 
+local DEG2RAD = math.pi / 180
+local RAD2DEG = 180 / math.pi
+local RE = 6371.2  -- referensradie WMM i km
+local A = 6378.137
+local B = 6356.7523142
+local MAX_N = WMM_SIZE_STANDARD   -- WMM2025 använder grad 12
+
 -- MSP-kommandon (brukliga id:n; SET_VARIABLE används för att skriva)
 local MSP_SET_VARIABLE = 0x2B
 local MSP_GET_VARIABLE = 0x2C  -- vi använder detta hypotetiskt för readback (motsvarighet på FC kan variera)
@@ -68,9 +75,7 @@ local function load_wmm_cof(path)
 
   --TODO: check if this is working, only set epoch on first line
   local epoch = string.match(all_data[1],"^%s*%d%d%d%d%.%d")
-  print(epoch)
   if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
-  print(WMM.epoch)
   
   --Start at first data line, 2
   for i=2, #all_data do
@@ -78,7 +83,6 @@ local function load_wmm_cof(path)
     --TODO: check if this works
     --TODO: reached eof if line starts with "9999" and add no more to all_data
     if string.match(line,"^99999") then
-      print(line)
       break 
     end
     
@@ -110,6 +114,97 @@ local function load_wmm_cof(path)
   return true, error
 end
 
+
+-----------------------------------------------------------------
+-- Huvudfunktion för WMM declination
+-----------------------------------------------------------------
+-- lat, lon = grader
+-- alt = meter
+-- y,m,d = datum
+-- model = tabell med fält: g[n][m], h[n][m], (valfritt dg, dh), epoch
+-----------------------------------------------------------------
+local function wmm_declination_full(lat, lon, alt, year, yearf)
+  
+  -- extrahera modelldata
+  local nmax = WMM.maxdeg or MAX_N
+  local g, h = WMM.g, WMM.h
+  local epoch = WMM.epoch or year
+  local dg, dh = WMM.g_dot or {}, WMM.h_dot or {} 
+  local t = yearf - epoch
+
+  -- geodetiska → geocentriska
+  local latr = lat*DEG2RAD
+  local lonr = lon*DEG2RAD
+  local alt_km = alt/1000
+
+  local coslat, sinlat = math.cos(latr), math.sin(latr)
+  local a2, b2 = A*A, B*B
+  local e2 = (a2-b2)/a2
+  local N = A / math.sqrt(1 - e2*sinlat*sinlat)
+
+  local X = (N+alt_km)*coslat*math.cos(lonr)
+  local Y = (N+alt_km)*coslat*math.sin(lonr)
+  local Z = ((1-e2)*N+alt_km)*sinlat
+
+  local r = math.sqrt(X*X+Y*Y+Z*Z)
+  local phi = math.asin(Z/r)        -- geocentric lat
+  local lam = math.atan2(Y,X)
+
+  -- associerade Legendre
+  local P, dP = {}, {}
+  for n=0,nmax do
+    P[n], dP[n] = {}, {}
+  end
+  P[0][0], dP[0][0] = 1, 0
+
+  local cosphi, sinphi = math.cos(phi), math.sin(phi)
+  local Br, Bt, Bp = 0,0,0
+  local a_r = RE / r
+  local ar_n = a_r * a_r
+
+  for n=1,nmax do
+    ar_n = ar_n * a_r
+    for m=0,n do
+      if n==m then
+        P[n][m] = cosphi * P[n-1][m-1]
+        dP[n][m] = cosphi*dP[n-1][m-1] - sinphi*P[n-1][m-1]
+      elseif n==1 or m==n-1 then
+        P[n][m] = sinphi*P[n-1][m]
+        dP[n][m] = sinphi*dP[n-1][m] + cosphi*P[n-1][m]
+      else
+        P[n][m] = sinphi*P[n-1][m] - ((n+m-1)/(n-m))*P[n-2][m]
+        dP[n][m] = sinphi*dP[n-1][m] + cosphi*P[n-1][m] - ((n+m-1)/(n-m))*dP[n-2][m]
+      end
+
+      local gnm = g[n][m] + (dg[n] and dg[n][m] or 0)*t
+      local hnm = h[n][m] + (dh[n] and dh[n][m] or 0)*t
+
+      local cosm, sinm = math.cos(m*lam), math.sin(m*lam)
+      local tmp = gnm*cosm + hnm*sinm
+
+      Br = Br + ar_n*(n+1)*tmp*P[n][m]
+      Bt = Bt - ar_n*tmp*dP[n][m]
+      Bp = Bp + ar_n*m*(gnm*sinm - hnm*cosm)*P[n][m]
+    end
+  end
+
+  -- koordinatrotation
+  local sin_theta, cos_theta = math.cos(phi), math.sin(phi)
+  local Xh = -Bt
+  local Yh = Bp/sin_theta
+  local Zh = -Br
+
+  local psi = latr - phi
+  local Xd = Xh*math.cos(psi) - Zh*math.sin(psi)
+  local Zd = Xh*math.sin(psi) + Zh*math.cos(psi)
+  local Yd = Yh
+
+  -- declination i grader
+  return math.atan2(Yd, Xd) * RAD2DEG
+end
+
+
+
 -- == WMM-beräkning (förenklad) ==
 local function compute_Pnm(sinphi, cosphi, nmax)
   local P = {}
@@ -140,8 +235,6 @@ local function compute_Pnm(sinphi, cosphi, nmax)
   return P
 end
 
-
-
 -- Kolla skottår
 local function isLeapYear(y)
   return (y % 4 == 0 and y % 100 ~= 0) or (y % 400 == 0)
@@ -150,6 +243,7 @@ end
 -- Beräkna dag på året (1–366)
 local function dayOfYear(year, month, day)
   local doy = 0
+  
   for m = 1, month-1 do
     doy = doy + monthDays[m]
   end
@@ -176,9 +270,10 @@ local function wmm_declination(lat_deg, lon_deg, alt_m, date_year)
   local dt = (date_year or (date["year"] + yday/365.25)) - (WMM.epoch or date["year"])
   local g, h = {}, {}
   
-  for n=0,nmax do  --TODO check why n start at 0? n starts at 1 in WMM.COF file
+  for n=1,nmax do  --TODO check why n start at 0? n starts at 1 in WMM.COF file
     g[n], h[n] = {}, {}
     for m=0,n do
+      --print(WMM.g[n][m])
       local g0 = (WMM.g[n] and WMM.g[n][m]) or 0
       local h0 = (WMM.h[n] and WMM.h[n][m]) or 0
       local gd = (WMM.g_dot[n] and WMM.g_dot[n][m]) or 0
@@ -441,17 +536,21 @@ local function run(event)
     if state.gps.lat and state.gps.lon then
       local date = getDateTime()
       local yday = dayOfYear(date["year"],date["mon"],date["day"])
-      state.year_dec =date["year"] + yday/365.25
-            
+      state.year_dec = date["year"] + yday/365.25
+      local yf = date["year"] + (yday-1) / (isLeapYear(date["year"]) and 366 or 365)
+      
+      local D = wmm_declination_full(state.gps.lat, state.gps.lon, state.gps.alt, date["year"], yf)
+      print(string.format("Declination = %.2f°", D))
+      
       local decl, incl = wmm_declination(state.gps.lat, state.gps.lon, state.gps.alt, state.year_dec)
       state.decl, state.incl = decl, incl
 
-      lcd.drawText(2,30, string.format("Lt %.4f  Ln %.4f Al %.2f", state.gps.lat, state.gps.lon, state.gps.alt))
-      lcd.drawText(2,40, string.format("Dec: %.3f°  Inc: %.3f°", round(decl,3), round(incl,3)))
+      lcd.drawText(2,25, string.format("Lt %.4f  Ln %.4f Al %.2f", state.gps.lat, state.gps.lon, state.gps.alt))
+      lcd.drawText(2,35, string.format("Dec: %.3f°  Inc: %.3f°", round(decl,3), round(incl,3)))
 
       if not state.pending_readback and not state.got_confirmation then
-        lcd.drawText(2,50, "Tryck ENT för att skicka till FC")
-        lcd.drawText(2,60, "Tryck EXIT för att avsluta")
+        lcd.drawText(2,45, "Tryck ENT för att skicka till FC")
+        lcd.drawText(2,55, "Tryck EXIT för att avsluta")
         if event == EVT_ENTER_BREAK then
           --local ok, err = send_set_and_request_readback(decl)
           --TODO: test the send function before trying to send it
