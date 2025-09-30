@@ -44,6 +44,7 @@ local function load_wmm_cof(path)
   local line_data = ""
   local chunks = 1
   local num_lines = 1
+  local error = nil
 
   local f = io.open(path, "r")
   
@@ -97,13 +98,16 @@ local function load_wmm_cof(path)
       WMM.h[n][m] = tonumber(hnm) or 0
       WMM.g_dot[n][m] = tonumber(dgnm) or 0
       WMM.h_dot[n][m] = tonumber(dhnm) or 0
-      if n > WMM.maxdeg then WMM.maxdeg = n end
+      if n > WMM.maxdeg then 
+        WMM.maxdeg = n 
+        error = "WMM_SIZE miss match"
+      end
     end
     ::continue::
   end
   
   if not WMM.epoch then WMM.epoch = os.date("%Y") + 0.0 end
-  return true
+  return error, true
 end
 
 -- == WMM-beräkning (förenklad) ==
@@ -489,5 +493,6 @@ local function run(event)
 end
 
 return { init = init, background = background, run = run }
+
 
 
