@@ -115,7 +115,7 @@ local function compute_Pnm(sinphi, cosphi, nmax)
   local P = {}
   for n=0,nmax do
     P[n] = {}
-    for m=0,nmax do 
+    for m=0,n+1 do  --TODO test this or go back to "for m=0, nmax do"
       P[n][m] = 0 
     end
   end
@@ -176,7 +176,7 @@ local function wmm_declination(lat_deg, lon_deg, alt_m, date_year)
   local dt = (date_year or (date["year"] + yday/365.25)) - (WMM.epoch or date["year"])
   local g, h = {}, {}
   
-  for n=0,nmax do
+  for n=0,nmax do  --TODO check why start at 0?
     g[n], h[n] = {}, {}
     for m=0,n do
       local g0 = (WMM.g[n] and WMM.g[n][m]) or 0
@@ -189,7 +189,7 @@ local function wmm_declination(lat_deg, lon_deg, alt_m, date_year)
   end
   local P = compute_Pnm(sinphi, cosphi, nmax)
   local Br, Btheta, Bphi = 0,0,0
-  for n=1,nmax do
+  for n=1,nmax do --TODO check why start at 1? P starts at 0
     local rn = (a / r)^(n+2)
     for m=0,n do
       local gnm = g[n][m] or 0
