@@ -6,6 +6,9 @@
 -- För att skicka/readback används CRSF DisplayPort via crossfireTelemetryPush/pop.
 -- Anpassa GPS_TELEM_NAME om din telemetri använder ett annat namn.
 
+
+
+
 local WMM_PATH = "/SCRIPTS/TOOLS/WMM.COF"
 local WMM_SIZE_STANDARD = 12 
 local MAX_N = WMM_SIZE_STANDARD   -- WMM2025 använder grad 12
@@ -44,7 +47,7 @@ local function toDeg(r) return r * 180.0 / math.pi end
 
 -- == WMM inläsning ==
 local WMM = { g = {}, h = {}, g_dot = {}, h_dot = {}, epoch = nil, maxdeg = WMM_SIZE_STANDARD }
-
+local coefficients  = {} --,{ n = nil, m = nil, gnm = nil, hnm = nil, dgnm = nil, dhnm = nil}}
 
 local function load_wmm_cof(path)
   local all_data = {}
@@ -76,12 +79,11 @@ local function load_wmm_cof(path)
   --TODO: check if this is working, only set epoch on first line
   local epoch = string.match(all_data[1],"^%s*%d%d%d%d%.%d")
   if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
-  
+  local row_i = 1
   --Start at first data line, 2
   for i=2, #all_data do
     line = trim(all_data[i])
-    --TODO: check if this works
-    --TODO: reached eof if line starts with "9999" and add no more to all_data
+    --reached eof if line starts with "9999" and add no more to all_data
     if string.match(line,"^99999") then
       break 
     end
@@ -89,6 +91,7 @@ local function load_wmm_cof(path)
     --if line == "" then goto continue end -- this should not be needed
 
     local n,m,gnm,hnm,dgnm,dhnm = string.match(line,"^(%d+)%s+(%d+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)")
+	
     if n then
       n = tonumber(n); m = tonumber(m)
       --if no entry declair as array
@@ -106,9 +109,106 @@ local function load_wmm_cof(path)
         WMM.maxdeg = n 
         error = "WMM_SIZE miss match"
       end
+	  
+	  
+	  --add to new structure coefficients
+	  coefficients[row_i] = {n = nil, m = nil, gnm = nil, hnm = nil, dgnm = nil, dhnm = nil}
+	  
+	  coefficients[row_i].n = n
+	  coefficients[row_i].m = m
+	  coefficients[row_i].gnm = tonumber(gnm)
+	  coefficients[row_i].hnm = tonumber(hnm)
+	  coefficients[row_i].dgnm = tonumber(dgnm)
+	  coefficients[row_i].dhnm = tonumber(dhnm)
+	  
+	  row_i = row_i + 1
+
     end
-    ::continue::
+    ---::continue::
   end
+  
+	local c = {}
+	local cd = {}
+	local snorm = {}
+	local fn = {}
+	local fm = {}
+	local k = {}
+
+	--# READ WORLD MAGNETIC MODEL SPHERICAL HARMONIC COEFFICIENTS
+	c[0] = {}
+	c[0][0] = 0.0
+	cd[0] = {}
+	cd[0][0] = 0.0
+	
+	local i = 0
+
+	for i=1, #coefficients do
+		if coefficients[i].m > WMM_SIZE_STANDARD then
+			break
+		end
+		if coefficients[i].m > coefficients[i].n or coefficients[i].m < 0 then
+			print("Corrupt record in model file")
+		end
+		if coefficients[i].m <= coefficients[i].n then
+			if c[coefficients[i].m] == nil then c[coefficients[i].m] = {} end	
+			c[coefficients[i].m][coefficients[i].n] = coefficients[i].gnm
+			if cd[coefficients[i].m] == nil then cd[coefficients[i].m] = {} end
+			cd[coefficients[i].m][coefficients[i].n] = coefficients[i].dgnm
+			if coefficients[i].m ~= 0 then
+				if c[coefficients[i].n] == nil then c[coefficients[i].n] = {} end
+				c[coefficients[i].n][coefficients[i].m - 1] = coefficients[i].hnm
+				if cd[coefficients[i].n] == nil then cd[coefficients[i].n] = {} end
+				cd[coefficients[i].n][coefficients[i].m - 1] = coefficients[i].dhnm
+			end
+		end
+	end
+	
+	-- # CONVERT SCHMIDT NORMALIZED GAUSS COEFFICIENTS TO UNNORMALIZED
+	snorm[0] = 1.0
+	fm[0] = 0.0
+	
+	local j,m,D1,D2 = nil
+	local size = WMM_SIZE_STANDARD  -- orginal kod säger +1 här
+	
+	for n=1, size do
+		snorm[n] = snorm[n - 1] * (2 * n - 1) / n 
+		j = 2
+		m = 0
+		D1 = 1
+		D2 = (n - m + D1) / D1		
+		while D2 > 0 do
+			if k[m] == nil then k[m] = {} end
+			k[m][n] = (((n - 1) * (n - 1)) - (m * m)) / ((2 * n - 1) * (2 * n - 3))
+			if m > 0 then
+				local flnmj = ((n - m + 1) * j) / (n + m)
+				snorm[n + m * size] = snorm[n + (m - 1) * size] * math.sqrt(flnmj)
+				j = 1
+				if c[n] == nil then c[n] = {} end
+				c[n][m - 1] = snorm[n + m * size] * c[n][m - 1]
+				if cd[n] == nil then cd[n] = {} end
+				cd[n][m - 1] = snorm[n + m * size] * cd[n][m - 1]
+			end
+			D2 = D2 - 1
+			m = m + D1
+		end
+		fn[n] = (n + 1)
+		fm[n] = (n)
+	end
+	k[1][1] = 0.0
+
+	--[[  
+	
+		self._epoch = epoch
+        self._model = model
+        self._release_date = release_date
+        self._c = c
+        self._cd = cd
+        self._p = snorm
+        self._fn = fn
+        self._fm = fm
+        self._k = k
+		
+	]]--
   
   if not WMM.epoch then WMM.epoch = os.date("%Y") + 0.0 end
   return true, error
@@ -175,7 +275,7 @@ local function wmm_declination_full(lat, lon, alt, year, yearf)
         P[n][m] = sinphi*P[n-1][m] - ((n+m-1)/(n-m))*P[n-2][m]
         dP[n][m] = sinphi*dP[n-1][m] + cosphi*P[n-1][m] - ((n+m-1)/(n-m))*dP[n-2][m]
       end
-
+	  
       local gnm = g[n][m] + (dg[n] and dg[n][m] or 0)*t
       local hnm = h[n][m] + (dh[n] and dh[n][m] or 0)*t
 
@@ -204,37 +304,6 @@ local function wmm_declination_full(lat, lon, alt, year, yearf)
 end
 
 
-
--- == WMM-beräkning (förenklad) ==
-local function compute_Pnm(sinphi, cosphi, nmax)
-  local P = {}
-  for n=0,nmax do --TODO check if n should start at 1? WMM.COF starts at 1
-    P[n] = {}
-    for m=0,n+1 do  --TODO test if this works or go back to "for m=0, nmax do"
-      P[n][m] = 0 
-    end
-  end
-  
-  P[0][0] = 1.0
-  if nmax >= 1 then
-    P[1][0] = sinphi
-    P[1][1] = cosphi
-  end
-  for n=2,nmax do --TODO: figure if start att n=2 is correct
-    P[n][0] = ((2*n-1) * sinphi * P[n-1][0] - (n-1) * P[n-2][0]) / n
-  end
-  for n=2,nmax do
-    for m=1,n do
-      if n==m then
-        P[n][m] = cosphi * P[n-1][m-1]
-      else
-         P[n][m] = ((2*n-1) * sinphi * P[n-1][m] - (n+m-1) * P[n-2][m]) / (n-m)
-      end
-    end
-  end
-  return P
-end
-
 -- Kolla skottår
 local function isLeapYear(y)
   return (y % 4 == 0 and y % 100 ~= 0) or (y % 400 == 0)
@@ -255,55 +324,6 @@ local function dayOfYear(year, month, day)
   end
 
   return doy
-end
-
-local function wmm_declination(lat_deg, lon_deg, alt_m, date_year)
-  local a = 6371200.0
-  local r = a + (alt_m or 0)
-  local phi = toRad(lat_deg)
-  local lam = toRad(lon_deg)
-  local sinphi = math.sin(phi)
-  local cosphi = math.cos(phi)
-  local nmax = WMM.maxdeg or 12
-  local date = getDateTime()
-  local yday = dayOfYear(date["year"],date["mon"],date["day"])
-  local dt = (date_year or (date["year"] + yday/365.25)) - (WMM.epoch or date["year"])
-  local g, h = {}, {}
-  
-  for n=1,nmax do  --TODO check why n start at 0? n starts at 1 in WMM.COF file
-    g[n], h[n] = {}, {}
-    for m=0,n do
-      --print(WMM.g[n][m])
-      local g0 = (WMM.g[n] and WMM.g[n][m]) or 0
-      local h0 = (WMM.h[n] and WMM.h[n][m]) or 0
-      local gd = (WMM.g_dot[n] and WMM.g_dot[n][m]) or 0
-      local hd = (WMM.h_dot[n] and WMM.h_dot[n][m]) or 0
-      g[n][m] = g0 + gd * dt
-      h[n][m] = h0 + hd * dt
-    end
-  end
-  local P = compute_Pnm(sinphi, cosphi, nmax)
-  local Br, Btheta, Bphi = 0,0,0
-  for n=1,nmax do --TODO check why start at 1? P starts at 0
-    local rn = (a / r)^(n+2)
-    for m=0,n do
-      local gnm = g[n][m] or 0
-      local hnm = h[n][m] or 0
-      local cos_mlam = math.cos(m * lam)
-      local sin_mlam = math.sin(m * lam)
-      local coeff = gnm * cos_mlam + hnm * sin_mlam
-      Br = Br + rn * (n+1) * coeff * P[n][m]
-      Btheta = Btheta - rn * coeff * ((P[n][m] * sinphi) / (cosphi + 1e-9))
-      if m > 0 then
-        Bphi = Bphi + rn * m * (gnm * (-sin_mlam) + hnm * cos_mlam) * P[n][m] / (cosphi + 1e-9)
-      end
-    end
-  end
-
-  local X, Y, Z = -Btheta, Bphi, Br
-  local decl = toDeg(math.atan2(Y, X))
-  local incl = toDeg(math.atan2(Z, math.sqrt(X*X + Y*Y)))
-  return decl, incl
 end
 
 -- == MSP rambyggare ==
@@ -399,14 +419,43 @@ end
 
 -- == Telemetri: läs GPS via getFieldInfo/getValue ==
 local function get_gps_from_telemetry()
+  
+  local ln,la,al = 0
+  local has_gps, has_alt = false
+  
   local f = getFieldInfo(GPS_TELEM_NAME)
   if f then
     local v = getValue(f.id)
+	--print(f.name)
     if type(v) == "table" then
       -- vanliga fält: lat, lon, alt (kan variera mellan radios)
-      return v.lat, v.lon, v.alt or 0
+      ln = v.lon
+	  la = v.lat
+	  has_gps = true
     end
   end
+  
+  local a = getFieldInfo("Alt")
+  if a then
+    local a_v = getValue("Alt")
+	if a_v then
+		al = a_v
+		has_alt = true
+	end
+  end
+  
+  if has_alt and has_gps then
+	return la, ln, al or 0
+  end
+  
+    --if type(v) == "table" then
+      -- vanliga fält: lat, lon, alt (kan variera mellan radios)
+	--  for key, value in pairs(v) do
+	--	print(key, value)
+	--  end
+    --  return v.lat, v.lon, v.alt or 0
+    --end
+  --end
   -- ska endast använda drönarens gps
   -- fallback: getTxGPS (om radio har inbyggd GPS)
   --if getTxGPS then
@@ -436,8 +485,9 @@ local state = {
 -- == Init / background / run ==
 local function init()
   local ok, err = load_wmm_cof(WMM_PATH)
+  
   state.wmm_ok = ok
-  state.msg = ok and ("WMM laddad epoch="..tostring(WMM.epoch)) or ("Fel WMM: "..tostring(err))
+  state.msg = ok and ("WMM epoch="..tostring(WMM.epoch)) or ("Fel WMM: "..tostring(err))
   
 end
 
@@ -519,7 +569,7 @@ end
 local function run(event)
   lcd.clear()
   lcd.drawText(2,2,"Mag Declination Tool", FONT_BIG)
-  lcd.drawText(2,15, state.msg or "")
+  lcd.drawText(2,13, state.msg or "", SMLSIZE)
 
   -- uppdatera GPS om vi inte har
   if not state.gps.lat then
@@ -538,15 +588,18 @@ local function run(event)
       local yday = dayOfYear(date["year"],date["mon"],date["day"])
       state.year_dec = date["year"] + yday/365.25
       local yf = date["year"] + (yday-1) / (isLeapYear(date["year"]) and 366 or 365)
+	  
+	  yf = 2025.000000
+	  state.gps.alt = 28000
+	  state.gps.lat = 89
+	  state.gps.lon = -121
+	  WMM.epoch = 2025
+	  
       
       local D = wmm_declination_full(state.gps.lat, state.gps.lon, state.gps.alt, date["year"], yf)
-      print(string.format("Declination = %.2f°", D))
-      
-      local decl, incl = wmm_declination(state.gps.lat, state.gps.lon, state.gps.alt, state.year_dec)
-      state.decl, state.incl = decl, incl
 
-      lcd.drawText(2,25, string.format("Lt %.4f  Ln %.4f Al %.2f", state.gps.lat, state.gps.lon, state.gps.alt))
-      lcd.drawText(2,35, string.format("Dec: %.3f°  Inc: %.3f°", round(decl,3), round(incl,3)))
+      lcd.drawText(2,21, string.format("Lt%.4f  Ln%.4f AL%.0fm", state.gps.lat, state.gps.lon, state.gps.alt), SMLSIZE)
+	  lcd.drawText(2,32, string.format("Dec: %.3f°", round(D,3)), SMLSIZE)
 
       if not state.pending_readback and not state.got_confirmation then
         lcd.drawText(2,45, "Tryck ENT för att skicka till FC")
@@ -578,7 +631,7 @@ local function run(event)
         else
           lcd.drawText(2,30, "Bekräftelse ej mottagen.")
         end
-        lcd.drawText(2,50, "Tryck EXIT för att avsluta")
+        lcd.drawText(2,50, "Tryck RTN för att avsluta")
       end
     else
       lcd.drawText(2,45,"Väntar på GPS-telemetri...")
