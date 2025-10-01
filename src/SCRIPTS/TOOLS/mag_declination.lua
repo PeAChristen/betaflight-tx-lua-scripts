@@ -47,7 +47,8 @@ local function toDeg(r) return r * 180.0 / math.pi end
 
 -- == WMM inläsning ==
 local WMM = { g = {}, h = {}, g_dot = {}, h_dot = {}, epoch = nil, maxdeg = WMM_SIZE_STANDARD }
-local coefficients  = {} --,{ n = nil, m = nil, gnm = nil, hnm = nil, dgnm = nil, dhnm = nil}}
+local coefficients  = {} 
+local WMM = { g = {}, h = {}, g_dot = {}, h_dot = {}, epoch = nil, maxdeg = WMM_SIZE_STANDARD }
 
 local function load_wmm_cof(path)
   local all_data = {}
@@ -81,7 +82,7 @@ local function load_wmm_cof(path)
   if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
   local row_i = 1
   --Start at first data line, 2
-  for i=2, #all_data do
+  for i=2, #all_data, 1 do
     line = trim(all_data[i])
     --reached eof if line starts with "9999" and add no more to all_data
     if string.match(line,"^99999") then
@@ -142,7 +143,7 @@ local function load_wmm_cof(path)
 	
 	local i = 0
 
-	for i=1, #coefficients do
+	for i=1, #coefficients,1 do
 		if coefficients[i].m > WMM_SIZE_STANDARD then
 			break
 		end
@@ -168,9 +169,9 @@ local function load_wmm_cof(path)
 	fm[0] = 0.0
 	
 	local j,m,D1,D2 = nil
-	local size = WMM_SIZE_STANDARD  -- orginal kod säger +1 här
+	local size = WMM_SIZE_STANDARD + 1
 	
-	for n=1, size do
+	for n=1,WMM_SIZE_STANDARD,1 do
 		snorm[n] = snorm[n - 1] * (2 * n - 1) / n 
 		j = 2
 		m = 0
@@ -184,6 +185,7 @@ local function load_wmm_cof(path)
 				snorm[n + m * size] = snorm[n + (m - 1) * size] * math.sqrt(flnmj)
 				j = 1
 				if c[n] == nil then c[n] = {} end
+				print(n.." : "..m.." : "..size)
 				c[n][m - 1] = snorm[n + m * size] * c[n][m - 1]
 				if cd[n] == nil then cd[n] = {} end
 				cd[n][m - 1] = snorm[n + m * size] * cd[n][m - 1]
