@@ -8,6 +8,7 @@
 
 local WMM_PATH = "/SCRIPTS/TOOLS/WMM.COF"
 local WMM_SIZE_STANDARD = 12 
+local MAX_N = WMM_SIZE_STANDARD   -- WMM2025 använder grad 12
 local GPS_TELEM_NAME = "GPS"
 local CRSF_DP_FRAME = 0x2D
 
@@ -16,7 +17,6 @@ local RAD2DEG = 180 / math.pi
 local RE = 6371.2  -- referensradie WMM i km
 local A = 6378.137
 local B = 6356.7523142
-local MAX_N = WMM_SIZE_STANDARD   -- WMM2025 använder grad 12
 
 -- MSP-kommandon (brukliga id:n; SET_VARIABLE används för att skriva)
 local MSP_SET_VARIABLE = 0x2B
@@ -86,7 +86,7 @@ local function load_wmm_cof(path)
       break 
     end
     
-    if line == "" then goto continue end
+    --if line == "" then goto continue end -- this should not be needed
 
     local n,m,gnm,hnm,dgnm,dhnm = string.match(line,"^(%d+)%s+(%d+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)")
     if n then
