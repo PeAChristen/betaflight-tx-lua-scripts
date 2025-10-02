@@ -176,6 +176,8 @@ local function load_wmm_cof(path)
 		end
 	end
 	
+
+	
 	-- # CONVERT SCHMIDT NORMALIZED GAUSS COEFFICIENTS TO UNNORMALIZED
 	snorm[0] = 1.0
 	fm[0] = 0.0	
@@ -192,7 +194,9 @@ local function load_wmm_cof(path)
 		j = 2
 		m = 0
 		D1 = 1
-		D2 = (n - m + D1) / D1		
+		D2 = (n - m + D1) / D1
+		--print(snorm[n])
+		--print("\n")
 		while D2 > 0 do
 			if k[m] == nil then k[m] = {} end
 			
@@ -209,33 +213,50 @@ local function load_wmm_cof(path)
 			--k[m][n] = ((n - 1) * (n - 1) - (m * m)) / (2 * n - 1) * (2 * n - 3)
 			
 			k[m][n] = fix_n4 / fix_n7
-			--[[
-			if m >= 5 then
-				print(m.." : "..n)
-				print(#k[m].." len of k[m]")
-				print(fix_n4 / fix_n7 .." k[m][n] should be")
-				print(k[m][n].." k[m][n] is")
-			end
-			]]--
-			
-			
-			
+			--print(k[m][n])
 			if m > 0 then
 				flnmj = (n - m + 1) * j / (n + m)
 				snorm[n + m * size] = snorm[n + (m - 1) * size] * math.sqrt(flnmj)
 				j = 1
 				if c[n] == nil then c[n] = {} end
 				c[n][m - 1] = snorm[n + m * size] * c[n][m - 1]
+				--print(c[n][m - 1])
 				if cd[n] == nil then cd[n] = {} end
 				cd[n][m - 1] = snorm[n + m * size] * cd[n][m - 1]
 			end
+
+			c[m][n] = snorm[n + m * size] * c[m][n]
+			cd[m][n] = snorm[n + m * size] * cd[m][n]
+			
 			D2 = D2 - 1
 			m = m + D1
+			--print(n + m * size)
 		end
 		fn[n] = (n + 1)
 		fm[n] = (n)
 	end
 	k[1][1] = 0.0
+	
+	
+	local function tablelength(T)
+	  local count = 0
+	  for _ in pairs(T) do count = count + 1 end
+	  return count
+	end
+
+	--[[
+	
+	print("Debug")
+	for i=0,#snorm do
+		print("\n")
+		print(i)
+		print(snorm[i])
+		--for j=1,12 do
+			--print(j.." "..snorm[i][j])
+		--end
+	end
+	]]--
+	
 	
 	cof.c = c
 	cof.cd = cd
@@ -244,19 +265,9 @@ local function load_wmm_cof(path)
 	cof.fm = fm
 	cof.k = k
 	
-	--[[
-	print("Debug")
-	print(#cof.k)
 	
-	for i=0,#cof.k do
-		print("\n")
-		print(i)
-		for j=1,12 do
-			--print(i..":"..j)
-			print(cof.k[i][j])
-		end
-	end
-	]]--
+
+	
   
   if not WMM.epoch then WMM.epoch = os.date("%Y") + 0.0 end
   return true, error
@@ -315,7 +326,7 @@ local function calculate(glat,glon,alt,time_decimal)
 	local ca = (alt + d) / r
 	local sa = c2 * crlat * srlat / (r * d)
 	
-	for m=2, WMM.maxdeg, 1 do
+	for m=2, WMM.maxdeg + 1, 1 do
 		sp[m] = sp[1] * cp[m - 1] + cp[1] * sp[m - 1]
 		cp[m] = cp[1] * cp[m - 1] - sp[1] * sp[m - 1]
 	end
@@ -326,17 +337,19 @@ local function calculate(glat,glon,alt,time_decimal)
 	local bt = 0.0
 	local bp = 0.0
 	local bpp = 0.0 
-	
+
 	local m
 	local D3
 	local D4
 	
 	local size = WMM.maxdeg + 1
+	print("Debug")
 	for n=1, WMM.maxdeg, 1 do
 		ar = ar * aor
 		m = 0
 		D3 = 1
 		D4 = (n + m + D3) / D3
+		print(n.." : ".."\n")
 		while D4 > 0 do
 			--# COMPUTE UNNORMALIZED ASSOCIATED LEGENDRE POLYNOMIALS
 			--# AND DERIVATIVES VIA RECURSION RELATIONS
@@ -354,16 +367,11 @@ local function calculate(glat,glon,alt,time_decimal)
 				if m > n - 2 then
 					dp[m][n - 2] = 0.0
 				end
-				--[[
-				print("Debug")
-				print(m..":"..n)
-				print(cof.k[m][n-1])
-				print("\n")
-				]]--
-				-- orig cof.k[m][n - 1] is cof.k[m][n]
+				
 				cof.p[n + m * size] = ct * cof.p[n - 1 + m * size] - cof.k[m][n] * cof.p[n - 2 + m * size]
 				dp[m][n] = ct * dp[m][n - 1] - st * cof.p[n - 1 + m * size] - cof.k[m][n] * dp[m][n - 2]
 			end
+			
 			--# TIME ADJUST THE GAUSS COEFFICIENTS
 			if tc[m] == nil then tc[m] = {} end
 			tc[m][n] = cof.c[m][n] + dt * cof.cd[m][n]
@@ -383,6 +391,9 @@ local function calculate(glat,glon,alt,time_decimal)
 			bp = bp + cof.fm[m] * temp2 * par
 			br = br + cof.fn[n] * temp1 * par
 			end
+			
+			print(temp1)
+			
 
 			--# SPECIAL CASE:  NORTH/SOUTH GEOGRAPHIC POLES
 			if st == 0.0 and m == 1 then
@@ -411,11 +422,18 @@ local function calculate(glat,glon,alt,time_decimal)
 	local by = bp
 	local bz = bt * sa - br * ca
 	
+	--print(bt) -- ejok
+	--print(ca) --ok
+	--print(br) -- ejok
+	--print(sa) -- ok 
+	
 	--# COMPUTE DECLINATION (DEC), INCLINATION (DIP) AND TOTAL INTENSITY (TI)
 	local bh = math.sqrt((bx * bx) + (by * by))
 	local f = math.sqrt((bh * bh) + (bz * bz))
 	local d = math.deg(math.atan2(by, bx))
 	local i = math.deg(math.atan2(bz, bh))
+	
+	
 	
 	--some computing of d is done in GeoMafResult.calculate()
 	
@@ -806,6 +824,7 @@ local function run(event)
 	  WMM.epoch = 2025.00
 	 --]]
 	  
+	  WMM.epoch = 2025.00
       
       --local D = wmm_declination_full(state.gps.lat, state.gps.lon, state.gps.alt, date["year"], yf)
       local D = calculate(state.gps.lat, state.gps.lon, state.gps.alt, yf)
