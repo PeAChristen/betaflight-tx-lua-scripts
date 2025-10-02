@@ -48,7 +48,7 @@ local function toDeg(r) return r * 180.0 / math.pi end
 -- == WMM inläsning ==
 local WMM = { g = {}, h = {}, g_dot = {}, h_dot = {}, epoch = nil, maxdeg = WMM_SIZE_STANDARD }
 local coefficients  = {} 
-local WMM = { g = {}, h = {}, g_dot = {}, h_dot = {}, epoch = nil, maxdeg = WMM_SIZE_STANDARD }
+local cof = {epoch =  nil, model = nil, release_date = nil, c = nil, cd = nil, p  = nil, fn = nil, fm = nil, k = nil}
 
 local function load_wmm_cof(path)
   local all_data = {}
@@ -80,6 +80,18 @@ local function load_wmm_cof(path)
   --TODO: check if this is working, only set epoch on first line
   local epoch = string.match(all_data[1],"^%s*%d%d%d%d%.%d")
   if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
+  
+  -- Extract headers
+  local first_line_elements_num = 1
+  first_line_elements = {}
+  for i in string.gmatch(all_data[1], "%S+") do
+	first_line_elements[first_line_elements_num] = i
+	first_line_elements_num = first_line_elements_num + 1
+  end
+  cof.epoch = first_line_elements[1]
+  cof.model = first_line_elements[2]
+  cof.release_date = first_line_elements[3]
+  
   local row_i = 1
   --Start at first data line, 2
   for i=2, #all_data, 1 do
@@ -166,9 +178,13 @@ local function load_wmm_cof(path)
 	
 	-- # CONVERT SCHMIDT NORMALIZED GAUSS COEFFICIENTS TO UNNORMALIZED
 	snorm[0] = 1.0
-	fm[0] = 0.0
+	fm[0] = 0.0	
+	local j = nil
+	local m = nil
+	local D1 = nil
+	local D2 = nil
+	local flnmj = nil
 	
-	local j,m,D1,D2 = nil
 	local size = WMM_SIZE_STANDARD + 1
 	
 	for n=1,WMM_SIZE_STANDARD,1 do
@@ -179,13 +195,36 @@ local function load_wmm_cof(path)
 		D2 = (n - m + D1) / D1		
 		while D2 > 0 do
 			if k[m] == nil then k[m] = {} end
-			k[m][n] = (((n - 1) * (n - 1)) - (m * m)) / ((2 * n - 1) * (2 * n - 3))
+			
+			local fix_n1 = n - 1
+			local fix_n2 = fix_n1 * fix_n1
+			local fix_n3 = m * m
+			local fix_n4 = fix_n2 - fix_n3
+			
+			local fix_n5 = 2 * n - 1
+			local fix_n6 = 2 * n - 3
+			local fix_n7 = fix_n5 * fix_n6
+			
+			
+			--k[m][n] = ((n - 1) * (n - 1) - (m * m)) / (2 * n - 1) * (2 * n - 3)
+			
+			k[m][n] = fix_n4 / fix_n7
+			--[[
+			if m >= 5 then
+				print(m.." : "..n)
+				print(#k[m].." len of k[m]")
+				print(fix_n4 / fix_n7 .." k[m][n] should be")
+				print(k[m][n].." k[m][n] is")
+			end
+			]]--
+			
+			
+			
 			if m > 0 then
-				local flnmj = ((n - m + 1) * j) / (n + m)
+				flnmj = (n - m + 1) * j / (n + m)
 				snorm[n + m * size] = snorm[n + (m - 1) * size] * math.sqrt(flnmj)
 				j = 1
 				if c[n] == nil then c[n] = {} end
-				print(n.." : "..m.." : "..size)
 				c[n][m - 1] = snorm[n + m * size] * c[n][m - 1]
 				if cd[n] == nil then cd[n] = {} end
 				cd[n][m - 1] = snorm[n + m * size] * cd[n][m - 1]
@@ -197,23 +236,190 @@ local function load_wmm_cof(path)
 		fm[n] = (n)
 	end
 	k[1][1] = 0.0
-
-	--[[  
 	
-		self._epoch = epoch
-        self._model = model
-        self._release_date = release_date
-        self._c = c
-        self._cd = cd
-        self._p = snorm
-        self._fn = fn
-        self._fm = fm
-        self._k = k
-		
+	cof.c = c
+	cof.cd = cd
+	cof.p = snorm
+	cof.fn = fn
+	cof.fm = fm
+	cof.k = k
+	
+	--[[
+	print("Debug")
+	print(#cof.k)
+	
+	for i=0,#cof.k do
+		print("\n")
+		print(i)
+		for j=1,12 do
+			--print(i..":"..j)
+			print(cof.k[i][j])
+		end
+	end
 	]]--
   
   if not WMM.epoch then WMM.epoch = os.date("%Y") + 0.0 end
   return true, error
+end
+
+local function calculate(glat,glon,alt,time_decimal)
+
+	local tc = {}
+	local dp = {}
+	local sp = {}
+	local cp = {}
+	local pp = {}
+	
+	--# INITIALIZE CONSTANTS
+	sp[0] = 0.0
+	cp[0] = 1.0
+	pp[0] = 1.0
+	dp[0] = {}
+	dp[0][0] = 0.0
+	local a = 6378.137
+	local b = 6356.7523142
+	local re = 6371.2
+	local a2 = a * a
+	local b2 = b * b
+	local c2 = a2 - b2
+	local a4 = a2 * a2
+	local b4 = b2 * b2
+    local c4 = a4 - b4
+	
+	local dt = time_decimal - cof.epoch
+	if dt < 0.0 or dt > 5.0 then
+		print("Time extends beyond model 5-year life span")
+	end
+	
+	local rlon = math.rad (glon)
+	local rlat = math.rad (glat)
+	local srlon = math.sin(rlon)
+	local srlat = math.sin(rlat)
+	local crlon = math.cos(rlon)
+	local crlat = math.cos(rlat)
+	local srlat2 = srlat * srlat
+	local crlat2 = crlat * crlat
+	sp[1] = srlon
+	cp[1] = crlon
+	
+	 --# CONVERT FROM GEODETIC COORDINATES TO SPHERICAL COORDINATES
+	
+	local q = math.sqrt(a2 - c2 * srlat2)
+	local q1 = alt * q
+	local q2 = ((q1 + a2) / (q1 + b2)) * ((q1 + a2) / (q1 + b2))
+	local ct = srlat / math.sqrt(q2 * crlat2 + srlat2)
+	local st = math.sqrt(1.0 - (ct * ct))
+	local r2 = (alt * alt) + 2.0 * q1 + (a4 - c4 * srlat2) / (q * q)
+	local r = math.sqrt(r2)
+	local d = math.sqrt(a2 * crlat2 + b2 * srlat2)
+	local ca = (alt + d) / r
+	local sa = c2 * crlat * srlat / (r * d)
+	
+	for m=2, WMM.maxdeg, 1 do
+		sp[m] = sp[1] * cp[m - 1] + cp[1] * sp[m - 1]
+		cp[m] = cp[1] * cp[m - 1] - sp[1] * sp[m - 1]
+	end
+	
+	local aor = re / r
+	local ar = aor * aor
+	local br = 0.0
+	local bt = 0.0
+	local bp = 0.0
+	local bpp = 0.0 
+	
+	local m
+	local D3
+	local D4
+	
+	local size = WMM.maxdeg + 1
+	for n=1, WMM.maxdeg, 1 do
+		ar = ar * aor
+		m = 0
+		D3 = 1
+		D4 = (n + m + D3) / D3
+		while D4 > 0 do
+			--# COMPUTE UNNORMALIZED ASSOCIATED LEGENDRE POLYNOMIALS
+			--# AND DERIVATIVES VIA RECURSION RELATIONS
+			if n == m then
+				cof.p[n + m * size] = st * cof.p[n - 1 + (m - 1) * size]
+				if dp[m] == nil then dp[m] = {} end
+				dp[m][n] = st * dp[m - 1][n - 1] + ct * cof.p[n - 1 + (m - 1) * size]
+			elseif n == 1 and m == 0 then
+				cof.p[n + m * size] = ct * cof.p[n - 1 + m * size]
+				dp[m][n] = ct * dp[m][n - 1] - st * cof.p[n - 1 + m * size]
+			elseif n > 1 and n ~= m then
+				if m > n - 2 then
+					cof.p[n - 2 + m * size] = 0.0
+				end
+				if m > n - 2 then
+					dp[m][n - 2] = 0.0
+				end
+				--[[
+				print("Debug")
+				print(m..":"..n)
+				print(cof.k[m][n-1])
+				print("\n")
+				]]--
+				-- orig cof.k[m][n - 1] is cof.k[m][n]
+				cof.p[n + m * size] = ct * cof.p[n - 1 + m * size] - cof.k[m][n] * cof.p[n - 2 + m * size]
+				dp[m][n] = ct * dp[m][n - 1] - st * cof.p[n - 1 + m * size] - cof.k[m][n] * dp[m][n - 2]
+			end
+			--# TIME ADJUST THE GAUSS COEFFICIENTS
+			if tc[m] == nil then tc[m] = {} end
+			tc[m][n] = cof.c[m][n] + dt * cof.cd[m][n]
+			if m ~= 0 then
+				if tc[n] == nil then tc[n] = {} end
+				tc[n][m - 1] = cof.c[n][m - 1] + dt * cof.cd[n][m - 1]
+			end
+			--# ACCUMULATE TERMS OF THE SPHERICAL HARMONIC EXPANSIONS
+			par = ar * cof.p[n + m * size]
+			if m == 0 then
+				temp1 = tc[m][n] * cp[m]
+				temp2 = tc[m][n] * sp[m]
+			else 
+				temp1 = tc[m][n] * cp[m] + tc[n][m - 1] * sp[m]
+				temp2 = tc[m][n] * sp[m] - tc[n][m - 1] * cp[m]
+			bt = bt - ar * temp1 * dp[m][n]
+			bp = bp + cof.fm[m] * temp2 * par
+			br = br + cof.fn[n] * temp1 * par
+			end
+
+			--# SPECIAL CASE:  NORTH/SOUTH GEOGRAPHIC POLES
+			if st == 0.0 and m == 1 then
+				if n == 1 then
+					pp[n] = pp[n - 1]
+				else
+					pp[n] = ct * pp[n - 1] - cof.k[m][n] * pp[n - 2]
+				end
+				
+				parp = ar * pp[n]
+				bpp = bpp + cof.fm[m] * temp2 * parp
+			end
+
+			D4 = D4 - 1
+			m = m + D3
+		end
+	end
+	
+	if st == 0.0 then
+		bp = bpp
+	else
+		bp = bp / st
+	end
+	--# ROTATE MAGNETIC VECTOR COMPONENTS FROM SPHERICAL TO GEODETIC COORDINATES
+	local bx = -bt * ca - br * sa
+	local by = bp
+	local bz = bt * sa - br * ca
+	
+	--# COMPUTE DECLINATION (DEC), INCLINATION (DIP) AND TOTAL INTENSITY (TI)
+	local bh = math.sqrt((bx * bx) + (by * by))
+	local f = math.sqrt((bh * bh) + (bz * bz))
+	local d = math.deg(math.atan2(by, bx))
+	local i = math.deg(math.atan2(bz, bh))
+	
+	--some computing of d is done in GeoMafResult.calculate()
+	
+	return d
 end
 
 
@@ -591,15 +797,24 @@ local function run(event)
       state.year_dec = date["year"] + yday/365.25
       local yf = date["year"] + (yday-1) / (isLeapYear(date["year"]) and 366 or 365)
 	  
+	  --[[ 
+	  -- första referens värdet
 	  yf = 2025.000000
 	  state.gps.alt = 28000
 	  state.gps.lat = 89
 	  state.gps.lon = -121
-	  WMM.epoch = 2025
+	  WMM.epoch = 2025.00
+	 --]]
 	  
       
-      local D = wmm_declination_full(state.gps.lat, state.gps.lon, state.gps.alt, date["year"], yf)
-
+      --local D = wmm_declination_full(state.gps.lat, state.gps.lon, state.gps.alt, date["year"], yf)
+      local D = calculate(state.gps.lat, state.gps.lon, state.gps.alt, yf)
+	  --print("cof")
+	  --print(D)
+	  --for i=0, WMM_SIZE_STANDARD, 1 do
+		--print(cof.p[i])
+	  --end
+	
       lcd.drawText(2,21, string.format("Lt%.4f  Ln%.4f AL%.0fm", state.gps.lat, state.gps.lon, state.gps.alt), SMLSIZE)
 	  lcd.drawText(2,32, string.format("Dec: %.3f°", round(D,3)), SMLSIZE)
 
