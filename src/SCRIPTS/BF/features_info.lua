@@ -7,6 +7,7 @@ local MSP_BUILD_INFO = 5
 local BUILD_OPTION_GPS    = 16412
 local BUILD_OPTION_VTX    = 16421
 local BUILD_OPTION_OSD_SD = 16416
+local BUILD_OPTION_MAG    = 16415
 
 local isGpsRead = false
 local isVtxRead = false
@@ -31,16 +32,20 @@ local function processBuildInfoReply(payload)
     features.gps = false
     features.vtx = false
     features.osdSD = false
+    features.compass = false
     for i = headLength + 1, #payload, 2 do
         local byte1 = bit32.lshift(payload[i], 0)
         local byte2 = bit32.lshift(payload[i + 1], 8)
         local word = bit32.bor(byte1, byte2)
+        
         if word == BUILD_OPTION_GPS then
             features.gps = true
         elseif word == BUILD_OPTION_VTX then
             features.vtx = true
         elseif word == BUILD_OPTION_OSD_SD then
             features.osdSD = true
+        elseif word == BUILD_OPTION_MAG then
+            features.compass = true
         end
     end
 end
