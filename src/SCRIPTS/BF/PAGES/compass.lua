@@ -12,7 +12,7 @@ local labels = {}
 local fields = {}
 
 labels[#labels + 1] = { t = "Compass Settings",    x = x, y = inc.y(lineSpacing) }
-fields[#fields + 1] = { t = "Magnetic Declination",     x = x + indent, y = inc.y(lineSpacing), sp = x + sp, min = 0, mult = 25, max = 20000, vals = { 4, 5 } }
+fields[#fields + 1] = { t = "Magnetic Declination",     x = x + indent, y = inc.y(lineSpacing), sp = x + sp, min = 0, mult = 25, max = 20000, vals = { 1, 2 } }
 
 return {
    read        = 133, -- MSP_COMPASS_CONFIG
