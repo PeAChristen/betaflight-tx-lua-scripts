@@ -372,6 +372,8 @@ local function calculate(glat,glon,alt,time_decimal)
 				dp[m][n] = ct * dp[m][n - 1] - st * cof.p[n - 1 + m * size] - cof.k[m][n] * dp[m][n - 2]
 			end
 			
+      --#cof.p and dp has been calculated above
+
 			--# TIME ADJUST THE GAUSS COEFFICIENTS
 			if tc[m] == nil then tc[m] = {} end
 			tc[m][n] = cof.c[m][n] + dt * cof.cd[m][n]
@@ -379,6 +381,8 @@ local function calculate(glat,glon,alt,time_decimal)
 				if tc[n] == nil then tc[n] = {} end
 				tc[n][m - 1] = cof.c[n][m - 1] + dt * cof.cd[n][m - 1]
 			end
+      --#tc has been calculated above
+
 			--# ACCUMULATE TERMS OF THE SPHERICAL HARMONIC EXPANSIONS
 			par = ar * cof.p[n + m * size]
 			if m == 0 then
@@ -387,10 +391,11 @@ local function calculate(glat,glon,alt,time_decimal)
 			else 
 				temp1 = tc[m][n] * cp[m] + tc[n][m - 1] * sp[m]
 				temp2 = tc[m][n] * sp[m] - tc[n][m - 1] * cp[m]
+      end
 			bt = bt - ar * temp1 * dp[m][n]
 			bp = bp + cof.fm[m] * temp2 * par
 			br = br + cof.fn[n] * temp1 * par
-			end
+			
 			
 			print(temp1)
 			
