@@ -25,6 +25,8 @@ local B = 6356.7523142
 
 -- MSP-kommandon (brukliga id:n; SET_VARIABLE används för att skriva)
 local MSP_SET_VARIABLE = 0x2B
+local MSP_COMPASS_CONFIG = 0x85 -- 133
+local MSP_SET_COMPASS_CONFIG = 0xE0 -- 224
 local MSP_GET_VARIABLE = 0x2C  -- vi använder detta hypotetiskt för readback (motsvarighet på FC kan variera)
 
 -- Enkel kompatibilitetshjälp (lua bitmanip)
@@ -557,9 +559,14 @@ end
 -- bygg payload för SET_VARIABLE (namn\0 + 16-bit värde little-endian)
 local function payload_set_variable(name, val_int16)
   local payload = {}
-  for i=1,#name do payload[#payload+1] = string.byte(name, i) end
-  payload[#payload+1] = 0 -- null
+  
+  --for i=1,#name do 
+  --	payload[#payload+1] = string.byte(name, i) 
+  --end
+  --payload[#payload+1] = 0 -- null
+  
   if val_int16 < 0 then val_int16 = 0x10000 + val_int16 end
+  
   payload[#payload+1] = byte(val_int16)
   payload[#payload+1] = byte_hi(val_int16)
   return payload
@@ -760,14 +767,17 @@ local function send_set_and_request_readback(decl_deg)
   state.pending_readback = true
   state.readback_attempts = 0
   state.last_error = nil
+  --intval = 200
+  print(state.expected_param..":"..intval)
 
   -- 1) Skicka SET_VARIABLE
   local payload_set = payload_set_variable(state.expected_param, intval)
-  local frame_set = build_msp(MSP_SET_VARIABLE, payload_set)
+  local frame_set = build_msp(MSP_SET_COMPASS_CONFIG, payload_set) -- was MSP_SET_VARIABLE
   
   --Debug
   for i = 1, #frame_set do
-	print(frame_set[i])
+	local ut = string.format("%x", frame_set[i]) 
+	print(frame_set[i].." : "..ut)
   end
   
   local ok, perr = send_msp_via_crsf(frame_set)
