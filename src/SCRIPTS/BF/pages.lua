@@ -68,4 +68,8 @@ if apiVersion >= 1.45 and features.osdSD then
     PageFiles[#PageFiles + 1] = { title = "OSD Elements", script = "pos_osd.lua" }
 end
 
+if apiVersion >= 1.45 and features.compass then
+    PageFiles[#PageFiles + 1] = { title = "Compass", script = "compass.lua" }
+end
+
 return PageFiles
