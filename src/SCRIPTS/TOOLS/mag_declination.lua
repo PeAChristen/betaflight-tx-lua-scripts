@@ -9,6 +9,9 @@
 local WMM_PATH = "/SCRIPTS/TOOLS/WMM.COF"
 local WMM_SIZE_STANDARD = 12 
 local GPS_TELEM_NAME = "GPS"
+local GPS_SATS_TELEM_NAME = "Sats"
+local GPS_ALT_TELEM_NAME = "Alt"
+local MIN_SATS_FOR_GPS_READY = 4
 local CRSF_DP_FRAME = 0x2D
 
 --[[
@@ -620,12 +623,20 @@ end
 local function get_gps_from_telemetry()
   
   local ln,la,al = 0
-  local has_gps, has_alt = false
+  local has_gps, has_alt = false 
+  local sats = 0
+  
+  local s = getFieldInfo(GPS_SATS_TELEM_NAME)
+  if s then
+    local v = getValue(s.id)
+    if v and v >= MIN_SATS_FOR_GPS_READY then
+      sats = v	  
+    end
+  end
   
   local f = getFieldInfo(GPS_TELEM_NAME)
   if f then
     local v = getValue(f.id)
-	--print(f.name)
     if type(v) == "table" then
       -- vanliga fält: lat, lon, alt (kan variera mellan radios)
       ln = v.lon
@@ -634,7 +645,23 @@ local function get_gps_from_telemetry()
     end
   end
   
-  local a = getFieldInfo("Alt")
+  local a = getFieldInfo(GPS_ALT_TELEM_NAME) -- TODO : Need to check which of thees Betaflight sends
+  local galt = getFieldInfo("GAlt") --GPS altitude
+  if galt then
+	local a_v = getValue("GAlt")
+	if a_v then
+		al = a_v
+		has_alt = true
+	end
+  elseif a then
+    local a_v = getValue(GPS_ALT_TELEM_NAME)
+	if a_v then
+		al = a_v
+		has_alt = true
+	end
+  end
+  
+  --[[
   if a then
     local a_v = getValue("Alt")
 	if a_v then
@@ -642,9 +669,10 @@ local function get_gps_from_telemetry()
 		has_alt = true
 	end
   end
+  ]]--
   
   if has_alt and has_gps then
-	return la, ln, al or 0
+	return la, ln, al, sats or 0
   end
   
   return nil
@@ -655,6 +683,7 @@ local state = {
   wmm_ok = false,
   msg = "",
   gps = { lat = nil, lon = nil, alt = 0 },
+  sats = 0,
   decl = nil,
   incl = nil,
   year_dec = nil,
@@ -735,9 +764,12 @@ local function send_set_and_request_readback(decl_deg)
   -- 1) Skicka SET_VARIABLE
   local payload_set = payload_set_variable(state.expected_param, intval)
   local frame_set = build_msp(MSP_SET_VARIABLE, payload_set)
+  
+  --Debug
   for i = 1, #frame_set do
 	print(frame_set[i])
   end
+  
   local ok, perr = send_msp_via_crsf(frame_set)
   if not ok then
     state.pending_readback = false
@@ -764,9 +796,9 @@ local function run(event)
 
   -- uppdatera GPS om vi inte har
   if not state.gps.lat then
-    local lat, lon, alt = get_gps_from_telemetry()
-    if lat and lon then
-      state.gps.lat = lat; state.gps.lon = lon; state.gps.alt = alt or 0
+    local lat, lon, alt, sats = get_gps_from_telemetry()
+    if lat and lon and sats > 0  then
+      state.gps.lat = lat; state.gps.lon = lon; state.gps.alt = alt; state.gps.sats = sats or 0
     end
   end
 
@@ -794,7 +826,7 @@ local function run(event)
       local decl = calculate(state.gps.lat, state.gps.lon, state.gps.alt, yf)
 
 	
-      lcd.drawText(2,21, string.format("Lt%.4f  Ln%.4f AL%.0fm", state.gps.lat, state.gps.lon, state.gps.alt), SMLSIZE)
+      lcd.drawText(2,21, string.format("Lt:%.4f  Ln:%.4f Al:%.0fm", state.gps.lat, state.gps.lon, state.gps.alt), SMLSIZE)
 	  lcd.drawText(2,33, string.format("Dec: %.3f°", round(decl,2)), SMLSIZE)
 
       if not state.pending_readback and not state.got_confirmation then
