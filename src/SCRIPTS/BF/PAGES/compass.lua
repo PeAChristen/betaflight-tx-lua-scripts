@@ -18,7 +18,7 @@ return {
    read        = 133, -- MSP_COMPASS_CONFIG
    write       = 224, -- MSP_SET_COMPASS_CONFIG
    title       = "Compass",
-   reboot      = false,
+   reboot      = true,
    eepromWrite = true,
    minBytes    = 13,
    labels      = labels,
