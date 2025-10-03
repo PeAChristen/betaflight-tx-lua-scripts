@@ -6,20 +6,19 @@
 -- För att skicka/readback används CRSF DisplayPort via crossfireTelemetryPush/pop.
 -- Anpassa GPS_TELEM_NAME om din telemetri använder ett annat namn.
 
-
-
-
 local WMM_PATH = "/SCRIPTS/TOOLS/WMM.COF"
 local WMM_SIZE_STANDARD = 12 
-local MAX_N = WMM_SIZE_STANDARD   -- WMM2025 använder grad 12
 local GPS_TELEM_NAME = "GPS"
 local CRSF_DP_FRAME = 0x2D
 
+--[[
+--uesd in  wmm_declination_full()
 local DEG2RAD = math.pi / 180
 local RAD2DEG = 180 / math.pi
 local RE = 6371.2  -- referensradie WMM i km
 local A = 6378.137
 local B = 6356.7523142
+]]--
 
 -- MSP-kommandon (brukliga id:n; SET_VARIABLE används för att skriva)
 local MSP_SET_VARIABLE = 0x2B
@@ -79,7 +78,7 @@ local function load_wmm_cof(path)
 
   --TODO: check if this is working, only set epoch on first line
   local epoch = string.match(all_data[1],"^%s*%d%d%d%d%.%d")
-  if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
+  --if epoch and not WMM.epoch then WMM.epoch = tonumber(epoch) end
   
   -- Extract headers
   local first_line_elements_num = 1
@@ -243,20 +242,6 @@ local function load_wmm_cof(path)
 	  for _ in pairs(T) do count = count + 1 end
 	  return count
 	end
-
-	--[[
-	
-	print("Debug")
-	for i=0,#snorm do
-		print("\n")
-		print(i)
-		print(snorm[i])
-		--for j=1,12 do
-			--print(j.." "..snorm[i][j])
-		--end
-	end
-	]]--
-	
 	
 	cof.c = c
 	cof.cd = cd
@@ -264,12 +249,8 @@ local function load_wmm_cof(path)
 	cof.fn = fn
 	cof.fm = fm
 	cof.k = k
-	
-	
 
-	
-  
-  if not WMM.epoch then WMM.epoch = os.date("%Y") + 0.0 end
+  --if not WMM.epoch then WMM.epoch = os.date("%Y") + 0.0 end
   return true, error
 end
 
@@ -343,13 +324,12 @@ local function calculate(glat,glon,alt,time_decimal)
 	local D4
 	
 	local size = WMM.maxdeg + 1
-	print("Debug")
 	for n=1, WMM.maxdeg, 1 do
 		ar = ar * aor
 		m = 0
 		D3 = 1
 		D4 = (n + m + D3) / D3
-		print(n.." : ".."\n")
+		
 		while D4 > 0 do
 			--# COMPUTE UNNORMALIZED ASSOCIATED LEGENDRE POLYNOMIALS
 			--# AND DERIVATIVES VIA RECURSION RELATIONS
@@ -371,8 +351,6 @@ local function calculate(glat,glon,alt,time_decimal)
 				cof.p[n + m * size] = ct * cof.p[n - 1 + m * size] - cof.k[m][n] * cof.p[n - 2 + m * size]
 				dp[m][n] = ct * dp[m][n - 1] - st * cof.p[n - 1 + m * size] - cof.k[m][n] * dp[m][n - 2]
 			end
-			
-      --#cof.p and dp has been calculated above
 
 			--# TIME ADJUST THE GAUSS COEFFICIENTS
 			if tc[m] == nil then tc[m] = {} end
@@ -381,7 +359,6 @@ local function calculate(glat,glon,alt,time_decimal)
 				if tc[n] == nil then tc[n] = {} end
 				tc[n][m - 1] = cof.c[n][m - 1] + dt * cof.cd[n][m - 1]
 			end
-      --#tc has been calculated above
 
 			--# ACCUMULATE TERMS OF THE SPHERICAL HARMONIC EXPANSIONS
 			par = ar * cof.p[n + m * size]
@@ -391,14 +368,11 @@ local function calculate(glat,glon,alt,time_decimal)
 			else 
 				temp1 = tc[m][n] * cp[m] + tc[n][m - 1] * sp[m]
 				temp2 = tc[m][n] * sp[m] - tc[n][m - 1] * cp[m]
-      end
+			end
+			
 			bt = bt - ar * temp1 * dp[m][n]
 			bp = bp + cof.fm[m] * temp2 * par
 			br = br + cof.fn[n] * temp1 * par
-			
-			
-			print(temp1)
-			
 
 			--# SPECIAL CASE:  NORTH/SOUTH GEOGRAPHIC POLES
 			if st == 0.0 and m == 1 then
@@ -427,21 +401,12 @@ local function calculate(glat,glon,alt,time_decimal)
 	local by = bp
 	local bz = bt * sa - br * ca
 	
-	--print(bt) -- ejok
-	--print(ca) --ok
-	--print(br) -- ejok
-	--print(sa) -- ok 
-	
 	--# COMPUTE DECLINATION (DEC), INCLINATION (DIP) AND TOTAL INTENSITY (TI)
 	local bh = math.sqrt((bx * bx) + (by * by))
 	local f = math.sqrt((bh * bh) + (bz * bz))
 	local d = math.deg(math.atan2(by, bx))
 	local i = math.deg(math.atan2(bz, bh))
-	
-	
-	
-	--some computing of d is done in GeoMafResult.calculate()
-	
+		
 	return d
 end
 
@@ -454,10 +419,11 @@ end
 -- y,m,d = datum
 -- model = tabell med fält: g[n][m], h[n][m], (valfritt dg, dh), epoch
 -----------------------------------------------------------------
+--[[
 local function wmm_declination_full(lat, lon, alt, year, yearf)
   
   -- extrahera modelldata
-  local nmax = WMM.maxdeg or MAX_N
+  local nmax = WMM.maxdeg or WMM_SIZE_STANDARD
   local g, h = WMM.g, WMM.h
   local epoch = WMM.epoch or year
   local dg, dh = WMM.g_dot or {}, WMM.h_dot or {} 
@@ -533,6 +499,8 @@ local function wmm_declination_full(lat, lon, alt, year, yearf)
   -- declination i grader
   return math.atan2(Yd, Xd) * RAD2DEG
 end
+
+]]--
 
 
 -- Kolla skottår
@@ -679,20 +647,6 @@ local function get_gps_from_telemetry()
 	return la, ln, al or 0
   end
   
-    --if type(v) == "table" then
-      -- vanliga fält: lat, lon, alt (kan variera mellan radios)
-	--  for key, value in pairs(v) do
-	--	print(key, value)
-	--  end
-    --  return v.lat, v.lon, v.alt or 0
-    --end
-  --end
-  -- ska endast använda drönarens gps
-  -- fallback: getTxGPS (om radio har inbyggd GPS)
-  --if getTxGPS then
-    --local txg = getTxGPS()
-    --if txg and txg.fix then return txg.lat, txg.lon, txg.alt or 0 end
-  --end
   return nil
 end
 
@@ -718,7 +672,7 @@ local function init()
   local ok, err = load_wmm_cof(WMM_PATH)
   
   state.wmm_ok = ok
-  state.msg = ok and ("WMM epoch="..tostring(WMM.epoch)) or ("Fel WMM: "..tostring(err))
+  state.msg = ok and ("WMM epoch="..tostring(cof.epoch)) or ("Fel WMM: "..tostring(err))
   
 end
 
@@ -769,6 +723,9 @@ local function send_set_and_request_readback(decl_deg)
   if intval < -32768 or intval > 32767 then
     return false, "värde utanför int16"
   end
+  
+  
+  
   state.expected_value = intval
   state.got_confirmation = false
   state.pending_readback = true
@@ -778,6 +735,9 @@ local function send_set_and_request_readback(decl_deg)
   -- 1) Skicka SET_VARIABLE
   local payload_set = payload_set_variable(state.expected_param, intval)
   local frame_set = build_msp(MSP_SET_VARIABLE, payload_set)
+  for i = 1, #frame_set do
+	print(frame_set[i])
+  end
   local ok, perr = send_msp_via_crsf(frame_set)
   if not ok then
     state.pending_readback = false
@@ -800,7 +760,7 @@ end
 local function run(event)
   lcd.clear()
   lcd.drawText(2,2,"Mag Declination Tool", FONT_BIG)
-  lcd.drawText(2,13, state.msg or "", SMLSIZE)
+  lcd.drawText(2,12, state.msg or "", SMLSIZE)
 
   -- uppdatera GPS om vi inte har
   if not state.gps.lat then
@@ -829,26 +789,21 @@ local function run(event)
 	  WMM.epoch = 2025.00
 	 --]]
 	  
-	  WMM.epoch = 2025.00
       
       --local D = wmm_declination_full(state.gps.lat, state.gps.lon, state.gps.alt, date["year"], yf)
-      local D = calculate(state.gps.lat, state.gps.lon, state.gps.alt, yf)
-	  --print("cof")
-	  --print(D)
-	  --for i=0, WMM_SIZE_STANDARD, 1 do
-		--print(cof.p[i])
-	  --end
+      local decl = calculate(state.gps.lat, state.gps.lon, state.gps.alt, yf)
+
 	
       lcd.drawText(2,21, string.format("Lt%.4f  Ln%.4f AL%.0fm", state.gps.lat, state.gps.lon, state.gps.alt), SMLSIZE)
-	  lcd.drawText(2,32, string.format("Dec: %.3f°", round(D,3)), SMLSIZE)
+	  lcd.drawText(2,33, string.format("Dec: %.3f°", round(decl,2)), SMLSIZE)
 
       if not state.pending_readback and not state.got_confirmation then
-        lcd.drawText(2,45, "Tryck ENT för att skicka till FC")
-        lcd.drawText(2,55, "Tryck EXIT för att avsluta")
+        lcd.drawText(2,46, "Tryck ENT -> skicka till FC", SMLSIZE)
+        lcd.drawText(2,55, "Tryck RTN -> avsluta", SMLSIZE)
         if event == EVT_ENTER_BREAK then
-          --local ok, err = send_set_and_request_readback(decl)
+          local ok, err = send_set_and_request_readback(decl)
           --TODO: test the send function before trying to send it
-          print("Send " ..dec1)
+          
           local ok = true
           if not ok then
             state.msg = "Fel vid sändning: " .. tostring(err)
