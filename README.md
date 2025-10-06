@@ -1,6 +1,9 @@
 ![BF lua logo light mode](docs/assets/images/bf_lua_logo_light_mode.png#gh-light-mode-only)
 ![BF lua logo dark mode](docs/assets/images/bf_lua_logo_dark_mode.png#gh-dark-mode-only)
 
+My attempt to implement a way to calculate magnetic declination from the GPS data or by user entered data.
+Calculationtion code used from https://github.com/boxpet/pygeomag and translated to LUA.
+
  [![Latest version](https://img.shields.io/github/v/release/betaflight/betaflight-tx-lua-scripts)](https://github.com/betaflight/betaflight-tx-lua-scripts/releases) [![Build](https://img.shields.io/github/actions/workflow/status/betaflight/betaflight-tx-lua-scripts/nightly.yml?branch=master)](https://github.com/betaflight/betaflight-tx-lua-scripts/actions/workflows/nightly.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ## Requirements
