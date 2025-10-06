@@ -20,7 +20,7 @@ return {
    title       = "Compass",
    reboot      = false,
    eepromWrite = true,
-   minBytes    = 13,
+   minBytes    = 2,
    labels      = labels,
    fields      = fields
 }
