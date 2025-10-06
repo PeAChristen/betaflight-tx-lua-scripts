@@ -14,6 +14,11 @@ local GPS_ALT_TELEM_NAME = "Alt"
 local MIN_SATS_FOR_GPS_READY = 4
 local CRSF_DP_FRAME = 0x2D
 
+
+--  Rewrite to be able to call this from bteaflight lua script
+--  Let BF LUA do the reading and writing from/to the FC 
+
+
 --[[
 --uesd in  wmm_declination_full()
 local DEG2RAD = math.pi / 180
@@ -843,7 +848,7 @@ local function run(event)
         lcd.drawText(2,46, "Tryck ENT -> skicka till FC", SMLSIZE)
         lcd.drawText(2,55, "Tryck RTN -> avsluta", SMLSIZE)
         if event == EVT_ENTER_BREAK then
-          local ok, err = send_set_and_request_readback(decl)
+          --local ok, err = send_set_and_request_readback(decl)
           --TODO: test the send function before trying to send it
           
           local ok = true
@@ -851,7 +856,7 @@ local function run(event)
             state.msg = "Fel vid sändning: " .. tostring(err)
           end
         end
-      elseif state.pending_readback and not state.got_confirmation then
+      --[[elseif state.pending_readback and not state.got_confirmation then
         lcd.drawText(2,92, "Väntar bekräftelse från FC...")
         -- timeout / retries
         state.readback_attempts = state.readback_attempts + 0.001 -- liten tidindikator
@@ -862,7 +867,7 @@ local function run(event)
           local frame_get = build_msp_get(MSP_GET_VARIABLE, payload_get)
           send_msp_via_crsf(frame_get)
           state.msg = "Retry: skickade GET igen"
-        end
+        end]]--
       elseif state.got_confirmation then
         if state.expected_value ~= nil then
           lcd.drawText(2,30, string.format("FC rapporterar %s = %d", state.expected_param, state.expected_value))
