@@ -24,7 +24,7 @@ local GPS_ALT_TELEM_NAME = "Alt"
 
 
 -- TODO: Make user to choose from gps data or manual entered data or skip to enter magnetic decliantion directly
--- TODO: Make gps poll loop and show num of gps sats and be able to escape back to above choice
+-- TODO: Make gps poll loop and show num of gps sats of requierd and be able to escape back to above choice
 
 -- Load WMM.COF, if no file - display info where to put WMM.COF file /SCRIPTS/BF/COMPASS
 -- If in gps_data mode and not enough satelites, dispaly wait message, use betaflight min sats value
